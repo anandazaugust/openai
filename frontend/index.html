@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>💬 MyOwnGPT</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+
+<body>
+  <div class="layout">
+
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+      <div class="sidebar-header">💬 MyOwnGPT</div>
+
+      <button class="menu-btn" id="new-chat">➕ New Chat</button>
+
+      <div id="chat-list" class="chat-list"></div>
+
+      <button class="menu-btn danger" id="clear-all">🧹 Clear All Chats</button>
+
+      <div class="sidebar-footer">
+        <small>Powered by Azure OpenAI</small>
+      </div>
+    </div>
+
+    <!-- MAIN CHAT WINDOW -->
+    <div class="main">
+      <div id="chat-box" class="chat-box">
+        <div id="empty-state" class="empty-state">Ask me anything…</div>
+      </div>
+
+      <div class="input-container">
+        <textarea id="prompt" rows="2" placeholder="Type your message..."></textarea>
+        <button id="send">Send</button>
+      </div>
+    </div>
+
+  </div>
+
+<script>
+  let chats = JSON.parse(localStorage.getItem("chats") || "{}");
+  let activeChatId = null;
+
+  const chatBox = document.getElementById("chat-box");
+  const chatList = document.getElementById("chat-list");
+  const input = document.getElementById("prompt");
+  const sendBtn = document.getElementById("send");
+  const newChatBtn = document.getElementById("new-chat");
+  const clearAllBtn = document.getElementById("clear-all");
+
+  /* ---------- EMPTY STATE ---------- */
+  function showEmptyState() {
+    chatBox.innerHTML = '<div id="empty-state" class="empty-state">Ask me anything…</div>';
+  }
+
+  function removeEmptyState() {
+    const empty = document.getElementById("empty-state");
+    if (empty) empty.remove();
+  }
+
+  /* ---------- SAVE CHATS ---------- */
+  function saveChats() {
+    localStorage.setItem("chats", JSON.stringify(chats));
+  }
+
+  /* ---------- RENDER SIDEBAR CHAT LIST ---------- */
+  function renderChatList() {
+    chatList.innerHTML = "";
+    Object.keys(chats).forEach(id => {
+      const btn = document.createElement("button");
+      btn.className = "chat-item";
+      btn.textContent = chats[id].title || "New Chat";
+      btn.onclick = () => loadChat(id);
+      chatList.appendChild(btn);
+    });
+  }
+
+  /* ---------- LOAD CHAT SAFELY ---------- */
+  function loadChat(id) {
+    activeChatId = id;
+    const chat = chats[id];
+
+    chatBox.innerHTML = "";
+
+    // SAFETY FIX — ensure messages exists
+    if (!chat.messages || !Array.isArray(chat.messages)) {
+      chat.messages = [];
+      saveChats();
+    }
+
+    if (chat.messages.length === 0) {
+      showEmptyState();
+      return;
+    }
+
+    chat.messages.forEach(msg => {
+      addMessage(msg.role, msg.content);
+    });
+  }
+
+  /* ---------- CREATE NEW CHAT ---------- */
+  function createNewChat() {
+    activeChatId = "chat-" + Date.now();
+    chats[activeChatId] = {
+      title: "New Chat",
+      messages: []   // IMPORTANT FIX
+    };
+    saveChats();
+    renderChatList();
+    showEmptyState();
+  }
+
+  /* ---------- UI: ADD MESSAGE ---------- */
+  function addMessage(role, content) {
+    removeEmptyState();
+
+    const msg = document.createElement("div");
+    msg.classList.add("message", role);
+    msg.innerHTML = `<div class="bubble">${content}</div>`;
+    chatBox.appendChild(msg);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }
+
+  /* ---------- TYPING EFFECT ---------- */
+  async function typeMessage(role, text) {
+    removeEmptyState();
+
+    const msg = document.createElement("div");
+    msg.classList.add("message", role);
+    const bubble = document.createElement("div");
+    bubble.classList.add("bubble");
+    msg.appendChild(bubble);
+    chatBox.appendChild(msg);
+
+    for (let i = 0; i < text.length; i++) {
+      bubble.textContent += text[i];
+      chatBox.scrollTop = chatBox.scrollHeight;
+      await new Promise(r => setTimeout(r, 7));
+    }
+  }
+
+  /* ---------- SEND BUTTON ---------- */
+  sendBtn.addEventListener("click", async () => {
+    const prompt = input.value.trim();
+    if (!prompt) return;
+
+    addMessage("user", prompt);
+
+    chats[activeChatId].messages.push({ role: "user", content: prompt });
+    saveChats();
+
+    input.value = "";
+
+    addMessage("assistant", "Thinking...");
+
+    try {
+      const res = await fetch("/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: chats[activeChatId].messages }),
+      });
+
+      const data = await res.json();
+      const botText = data.text;
+
+      chatBox.lastChild.remove(); // remove "Thinking..."
+
+      chats[activeChatId].messages.push({ role: "assistant", content: botText });
+      saveChats();
+
+      await typeMessage("assistant", botText);
+
+      // Auto-generate chat title
+      if (chats[activeChatId].title === "New Chat") {
+        chats[activeChatId].title = prompt.substring(0, 25);
+        saveChats();
+        renderChatList();
+      }
+    } catch (err) {
+      addMessage("assistant", "⚠️ Error: " + err.message);
+    }
+  });
+
+  /* ---------- SIDEBAR BUTTONS ---------- */
+  newChatBtn.addEventListener("click", createNewChat);
+
+  clearAllBtn.addEventListener("click", () => {
+    if (confirm("Delete all chats?")) {
+      chats = {};
+      saveChats();
+      renderChatList();
+      showEmptyState();
+    }
+  });
+
+  /* ---------- INITIALIZE ---------- */
+  if (Object.keys(chats).length === 0) {
+    createNewChat();
+  } else {
+    renderChatList();
+    loadChat(Object.keys(chats)[0]);
+  }
+</script>
+
+</body>
+</html>

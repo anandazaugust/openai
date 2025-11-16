@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openaibackend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openaibackend
+  template:
+    metadata:
+      labels:
+        app: openaibackend
+        
+    spec:
+    
+      nodeSelector:
+        agentpool: agentpool  # <-- This targets the specific node pool
+      containers:
+      - name: openaibackend
+        image: acrtestopenai.azurecr.io/backend:41
+        env:
+            - name: AZURE_OPENAI_ENDPOINT
+              value: "https://openai4443.openai.azure.com/"
+            - name: AZURE_OPENAI_DEPLOYMENT
+              value: "gpt-5-mini"
+       
+
+
+---
+apiVersion: v1
+kind: Service 
+metadata:
+  name: openaibackend-svc
+spec:
+  type: ClusterIP
+  selector:
+    app: openaibackend
+  ports: 
+    - name: http
+      port: 80
+      targetPort: 8080

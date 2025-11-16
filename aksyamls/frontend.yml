@@ -1,0 +1,41 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: openaifrontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: openaifrontend
+  template:
+    metadata:
+      labels:
+        app: openaifrontend
+        
+    spec:
+    
+      nodeSelector:
+        agentpool: agentpool  # <-- This targets the specific node pool
+      containers:
+      - name: openaifrontend
+        image: acrtestopenai.azurecr.io/frontend:11
+        env:
+            - name: BACKEND_URL
+              value: http://openaibackend-svc
+         
+       
+
+
+---
+apiVersion: v1
+kind: Service 
+metadata:
+  name: openaifrontend-svc
+spec:
+  type: LoadBalancer
+  selector:
+    app: openaifrontend
+  ports: 
+    - name: http
+      port: 80
+      targetPort: 8080
