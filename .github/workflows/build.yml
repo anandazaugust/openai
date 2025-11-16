@@ -6,6 +6,7 @@ on:
     - openaifromaks
     - newpythonupdate
     - myowngpt
+    - feature1
   workflow_dispatch:  
     inputs:
       tier:
