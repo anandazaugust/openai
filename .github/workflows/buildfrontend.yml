@@ -28,7 +28,7 @@ env:
   IMAGE_TAG: ${{ github.run_number }}
   # IMAGE_NAME: ${{ env.TIER }}
   # DOCKERFILE_PATH: ./openai/${{ env.TIER }}/Dockerfile
-  # BUILD_CONTEXT: ./openai/${{ env.TIER }}t
+  # BUILD_CONTEXT: ./openai/${{ env.TIER }}tt
 
 jobs:
   build-and-push:
