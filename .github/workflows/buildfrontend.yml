@@ -1,0 +1,82 @@
+name: Build frontend and Push to ACR
+
+on:
+  push:
+   branches:
+    - openaifromaks
+    - newpythonupdate
+    - myowngpt
+  workflow_dispatch:  
+    inputs:
+      tier:
+        description: "Select which image to build"
+        required: true
+        default: "frontend"
+        type: choice
+        options:
+          - backend     
+          - frontend
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  ACR_NAME: acrtestopenai
+  tier: frontend
+  IMAGE_TAG: ${{ github.run_number }}
+  # IMAGE_NAME: ${{ env.TIER }}
+  # DOCKERFILE_PATH: ./openai/${{ env.TIER }}/Dockerfile
+  # BUILD_CONTEXT: ./openai/${{ env.TIER }}t
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set environment variables dynamically
+        run: |
+          # echo "TIER=${{ github.event.inputs.tier }}" >> $GITHUB_ENV
+          echo "IMAGE_NAME=${{ github.event.inputs.tier }}" >> $GITHUB_ENV
+          echo "DOCKERFILE_PATH=./openai/frontend/Dockerfile" >> $GITHUB_ENV
+          echo "BUILD_CONTEXT=./openai/frontend" >> $GITHUB_ENV
+
+
+      # 🔹 Login to Azure using OIDC (secure, no secrets)
+      - name: Azure login
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID_ACR }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID_ACR }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID_ACR }}
+          #tt11111
+
+      - name: acr login
+        run: az acr login --name $ACR_NAME
+
+      # 🔹 Build Docker image
+      - name: Build Docker Image
+        run: |
+          echo "Building Docker image..."
+          docker build \
+            -f $DOCKERFILE_PATH \
+            -t $ACR_NAME.azurecr.io/$tier:$IMAGE_TAG \
+            $BUILD_CONTEXT
+
+      - name: Show Docker Images
+        run: docker images
+
+      # 🔹 Push the tagged image
+      - name: Push Image with Build Number Tag
+        run: |
+          echo "Pushing image..."
+          docker push $ACR_NAME.azurecr.io/$tier:$IMAGE_TAG
+
+      # 🔹 Tag and push as latest
+      - name: Tag and Push Latest
+        run: |
+          docker tag $ACR_NAME.azurecr.io/$tier:$IMAGE_TAG $ACR_NAME.azurecr.io/$tier:latest
+          docker push $ACR_NAME.azurecr.io/$tier:latest
+      
