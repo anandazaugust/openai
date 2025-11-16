@@ -23,7 +23,7 @@ permissions:
   contents: read
 
 env:
-  ACR_NAME: acrtestopenai
+  ACR_NAME: acropenai2
   tier: frontend
   IMAGE_TAG: ${{ github.run_number }}
   # IMAGE_NAME: ${{ env.TIER }}
