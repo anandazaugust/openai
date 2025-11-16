@@ -18,10 +18,10 @@ spec:
         agentpool: agentpool  # <-- This targets the specific node pool
       containers:
       - name: openaibackend
-        image: acrtestopenai.azurecr.io/backend:41
+        image: acropenai2.azurecr.io/backend:latest
         env:
             - name: AZURE_OPENAI_ENDPOINT
-              value: "https://openai4443.openai.azure.com/"
+              value: https://openaiforaks.openai.azure.com/
             - name: AZURE_OPENAI_DEPLOYMENT
               value: "gpt-5-mini"
        
