@@ -7,6 +7,7 @@ on:
     - newpythonupdate
     - myowngpt
     - feature1
+    - redisforllm-localstorageforui
   workflow_dispatch:  
     inputs:
       tier:
@@ -28,7 +29,7 @@ env:
   IMAGE_TAG: ${{ github.run_number }}
   # IMAGE_NAME: ${{ env.TIER }}
   # DOCKERFILE_PATH: ./openai/${{ env.TIER }}/Dockerfile
-  # BUILD_CONTEXT: ./openai/${{ env.TIER }}tt
+  # BUILD_CONTEXT: ./openai/${{ env.TIER }}ttt
 
 jobs:
   build-and-push:
