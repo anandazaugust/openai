@@ -26,9 +26,7 @@
 
     <!-- MAIN CHAT WINDOW -->
     <div class="main">
-      <div id="chat-box" class="chat-box">
-        <div id="empty-state" class="empty-state">Ask me anything…</div>
-      </div>
+      <div id="chat-box" class="chat-box"></div>
 
       <div class="input-container">
         <textarea id="prompt" rows="2" placeholder="Type your message..."></textarea>
@@ -49,22 +47,12 @@
   const newChatBtn = document.getElementById("new-chat");
   const clearAllBtn = document.getElementById("clear-all");
 
-  /* ---------- EMPTY STATE ---------- */
-  function showEmptyState() {
-    chatBox.innerHTML = '<div id="empty-state" class="empty-state">Ask me anything…</div>';
-  }
-
-  function removeEmptyState() {
-    const empty = document.getElementById("empty-state");
-    if (empty) empty.remove();
-  }
-
-  /* ---------- SAVE CHATS ---------- */
+  /* ---------- SAVE CHATS LOCALLY ---------- */
   function saveChats() {
     localStorage.setItem("chats", JSON.stringify(chats));
   }
 
-  /* ---------- RENDER SIDEBAR CHAT LIST ---------- */
+  /* ---------- RENDER CHAT LIST ---------- */
   function renderChatList() {
     chatList.innerHTML = "";
     Object.keys(chats).forEach(id => {
@@ -76,27 +64,16 @@
     });
   }
 
-  /* ---------- LOAD CHAT SAFELY ---------- */
+  /* ---------- LOAD CHAT ---------- */
   function loadChat(id) {
     activeChatId = id;
     const chat = chats[id];
 
     chatBox.innerHTML = "";
 
-    // SAFETY FIX — ensure messages exists
-    if (!chat.messages || !Array.isArray(chat.messages)) {
-      chat.messages = [];
-      saveChats();
-    }
+    if (!chat.messages || chat.messages.length === 0) return;
 
-    if (chat.messages.length === 0) {
-      showEmptyState();
-      return;
-    }
-
-    chat.messages.forEach(msg => {
-      addMessage(msg.role, msg.content);
-    });
+    chat.messages.forEach(msg => addMessage(msg.role, msg.content));
   }
 
   /* ---------- CREATE NEW CHAT ---------- */
@@ -104,17 +81,15 @@
     activeChatId = "chat-" + Date.now();
     chats[activeChatId] = {
       title: "New Chat",
-      messages: []   // IMPORTANT FIX
+      messages: []
     };
     saveChats();
     renderChatList();
-    showEmptyState();
+    chatBox.innerHTML = "";
   }
 
   /* ---------- UI: ADD MESSAGE ---------- */
   function addMessage(role, content) {
-    removeEmptyState();
-
     const msg = document.createElement("div");
     msg.classList.add("message", role);
     msg.innerHTML = `<div class="bubble">${content}</div>`;
@@ -124,8 +99,6 @@
 
   /* ---------- TYPING EFFECT ---------- */
   async function typeMessage(role, text) {
-    removeEmptyState();
-
     const msg = document.createElement("div");
     msg.classList.add("message", role);
     const bubble = document.createElement("div");
@@ -140,25 +113,31 @@
     }
   }
 
-  /* ---------- SEND BUTTON ---------- */
+  /* ---------- SEND MESSAGE ---------- */
   sendBtn.addEventListener("click", async () => {
     const prompt = input.value.trim();
     if (!prompt) return;
 
+    // Display user message in UI
     addMessage("user", prompt);
 
+    // Store only for UI, NOT for sending to backend
     chats[activeChatId].messages.push({ role: "user", content: prompt });
     saveChats();
 
     input.value = "";
 
+    // Temporary "Thinking…" text
     addMessage("assistant", "Thinking...");
 
     try {
       const res = await fetch("/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: chats[activeChatId].messages }),
+        body: JSON.stringify({
+          chat_id: activeChatId,   // <--- THIS IS KEY
+          message: prompt          // <--- ONLY new message
+        }),
       });
 
       const data = await res.json();
@@ -166,7 +145,11 @@
 
       chatBox.lastChild.remove(); // remove "Thinking..."
 
-      chats[activeChatId].messages.push({ role: "assistant", content: botText });
+      // Save assistant reply locally for UI
+      chats[activeChatId].messages.push({
+        role: "assistant",
+        content: botText
+      });
       saveChats();
 
       await typeMessage("assistant", botText);
@@ -177,12 +160,13 @@
         saveChats();
         renderChatList();
       }
+
     } catch (err) {
       addMessage("assistant", "⚠️ Error: " + err.message);
     }
   });
 
-  /* ---------- SIDEBAR BUTTONS ---------- */
+  /* ---------- BUTTON ACTIONS ---------- */
   newChatBtn.addEventListener("click", createNewChat);
 
   clearAllBtn.addEventListener("click", () => {
@@ -190,11 +174,11 @@
       chats = {};
       saveChats();
       renderChatList();
-      showEmptyState();
+      chatBox.innerHTML = "";
     }
   });
 
-  /* ---------- INITIALIZE ---------- */
+  /* ---------- INITIAL LOAD ---------- */
   if (Object.keys(chats).length === 0) {
     createNewChat();
   } else {
