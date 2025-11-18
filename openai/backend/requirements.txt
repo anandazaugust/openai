@@ -4,3 +4,4 @@ httpx
 azure-identity
 openai
 redis
+redis-entraid
