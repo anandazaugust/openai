@@ -2,22 +2,31 @@ import os
 import json
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from azure.identity import DefaultAzureCredential
-from openai import AzureOpenAI
-import redis
 
-# ------------------------------
-# FastAPI App
-# ------------------------------
+# Azure Identity (Managed Identity)
+from azure.identity import DefaultAzureCredential
+
+# Azure OpenAI
+from openai import AzureOpenAI
+
+# Redis with Entra ID token support
+import redis
+from redis_entraid.cred_provider import create_from_default_azure_credential
+
+
+# ------------------------------------------------------
+# FastAPI app
+# ------------------------------------------------------
 app = FastAPI()
 
-# ------------------------------
+
+# ------------------------------------------------------
 # Environment Variables
-# ------------------------------
+# ------------------------------------------------------
 AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT")
 REDIS_HOST = os.getenv("REDIS_HOST")
-REDIS_PORT = os.getenv("REDIS_PORT", 6379)
+REDIS_PORT = int(os.getenv("REDIS_PORT", "10000"))  # Managed Redis Enterprise uses 10000
 
 if not AZURE_OPENAI_ENDPOINT or not AZURE_OPENAI_DEPLOYMENT:
     raise RuntimeError("AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_DEPLOYMENT must be set")
@@ -25,19 +34,16 @@ if not AZURE_OPENAI_ENDPOINT or not AZURE_OPENAI_DEPLOYMENT:
 if not REDIS_HOST:
     raise RuntimeError("REDIS_HOST must be set")
 
-# ------------------------------
-# Redis Client (No password for now - Option A)
-# ------------------------------
-redis_client = redis.StrictRedis(
-    host=REDIS_HOST,
-    port=int(REDIS_PORT),
-    decode_responses=True  # return str instead of bytes
-)
 
-# ------------------------------
-# Azure OpenAI Client (Managed Identity)
-# ------------------------------
+# ------------------------------------------------------
+# Managed Identity Credential (common for OpenAI & Redis)
+# ------------------------------------------------------
 credential = DefaultAzureCredential()
+
+
+# ------------------------------------------------------
+# Azure OpenAI client (Managed Identity)
+# ------------------------------------------------------
 token = credential.get_token("https://cognitiveservices.azure.com/.default")
 
 client = AzureOpenAI(
@@ -46,43 +52,61 @@ client = AzureOpenAI(
     azure_endpoint=AZURE_OPENAI_ENDPOINT,
 )
 
-# ------------------------------
-# Request Model
-# ------------------------------
+
+# ------------------------------------------------------
+# Redis with Managed Identity (using redis-entraid)
+# ------------------------------------------------------
+# Scope for Redis tokens
+REDIS_SCOPE = ("https://redis.azure.com/.default",)
+
+credential_provider = create_from_default_azure_credential(REDIS_SCOPE)
+
+redis_client = redis.Redis(
+    host=REDIS_HOST,
+    port=REDIS_PORT,
+    ssl=True,
+    decode_responses=True,
+    credential_provider=credential_provider,  # 🔥 No password!
+    socket_timeout=10,
+    socket_connect_timeout=10,
+)
+
+
+# ------------------------------------------------------
+# Request schema
+# ------------------------------------------------------
 class Prompt(BaseModel):
     chat_id: str
     message: str
 
 
-# ------------------------------
+# ------------------------------------------------------
 # Redis Helpers
-# ------------------------------
+# ------------------------------------------------------
 def load_chat(chat_id: str):
-    """Load full conversation from Redis."""
     data = redis_client.get(chat_id)
     if data:
         return json.loads(data)
-    return []  # new empty chat
+    return []
 
 
 def save_chat(chat_id: str, messages):
-    """Save updated conversation to Redis."""
     redis_client.set(chat_id, json.dumps(messages))
 
 
-# ------------------------------
+# ------------------------------------------------------
 # API Endpoint
-# ------------------------------
+# ------------------------------------------------------
 @app.post("/chat")
 async def chat(p: Prompt):
     try:
-        # 1. Load full history from Redis
+        # Load history
         history = load_chat(p.chat_id)
 
-        # 2. Add new user message
+        # Add user message
         history.append({"role": "user", "content": p.message})
 
-        # 3. Call Azure OpenAI with FULL history
+        # Call Azure OpenAI
         response = client.chat.completions.create(
             model=AZURE_OPENAI_DEPLOYMENT,
             messages=history
@@ -90,13 +114,10 @@ async def chat(p: Prompt):
 
         reply = response.choices[0].message.content
 
-        # 4. Append assistant message to memory
+        # Save assistant response
         history.append({"role": "assistant", "content": reply})
-
-        # 5. Save updated history back to Redis
         save_chat(p.chat_id, history)
 
-        # 6. Return assistant reply
         return {
             "text": reply,
             "usage": {
