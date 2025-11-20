@@ -11,37 +11,40 @@ spec:
     metadata:
       labels:
         app: openaibackend
-        
     spec:
-    
       nodeSelector:
-        agentpool: agentpool  # <-- This targets the specific node pool
+        agentpool: agentpool
       containers:
       - name: openaibackend
-        image: acropenai2.azurecr.io/backend:13
+        image: acropenai2.azurecr.io/backend:14
+
+        # FIX: expose containerPort 8080
+        ports:
+          - containerPort: 80
+
         env:
-            - name: AZURE_OPENAI_ENDPOINT
-              value: https://foundry112.openai.azure.com
-            - name: AZURE_OPENAI_DEPLOYMENT
-              value: "gpt-5-nano"
-            - name: REDIS_HOST
-              value: "redisforopenai.uksouth.redis.azure.net"
-            - name: REDIS_PORT
-              value: "10000"
-            - name: AZURE_CLIENT_ID
-              value: d872c677-71c9-478c-ac3c-77b7edb26238
+          - name: AZURE_OPENAI_ENDPOINT
+            value: "https://foundry112.openai.azure.com"
+          - name: AZURE_OPENAI_DEPLOYMENT
+            value: "gpt-5-nano"
+          - name: REDIS_HOST
+            value: "redisforopenai.uksouth.redis.azure.net"
+          - name: REDIS_PORT
+            value: "10000"
+          - name: AZURE_CLIENT_ID
+            value: "d872c677-71c9-478c-ac3c-77b7edb26238"
 
 
 ---
 apiVersion: v1
-kind: Service 
+kind: Service
 metadata:
   name: openaibackend-svc
 spec:
   type: ClusterIP
   selector:
     app: openaibackend
-  ports: 
+  ports:
     - name: http
       port: 80
-      targetPort: 8080
+      targetPort: 80
