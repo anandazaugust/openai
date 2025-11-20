@@ -16,7 +16,7 @@ spec:
         agentpool: agentpool
       containers:
       - name: openaibackend
-        image: acropenai2.azurecr.io/backend:14
+        image: acropenai2.azurecr.io/backend:latest
 
         # FIX: expose containerPort 8080
         ports:
@@ -24,15 +24,15 @@ spec:
 
         env:
           - name: AZURE_OPENAI_ENDPOINT
-            value: "https://foundry112.openai.azure.com"
+            value: "https://openai1134.openai.azure.com"
           - name: AZURE_OPENAI_DEPLOYMENT
-            value: "gpt-5-nano"
+            value: "gpt-5-mini"
           - name: REDIS_HOST
-            value: "redisforopenai.uksouth.redis.azure.net"
+            value: "redisforai.uksouth.redis.azure.net"
           - name: REDIS_PORT
             value: "10000"
           - name: AZURE_CLIENT_ID
-            value: "d872c677-71c9-478c-ac3c-77b7edb26238"
+            value: "https://openai1134.openai.azure.com"
 
 
 ---
