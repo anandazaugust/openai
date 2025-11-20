@@ -18,7 +18,7 @@ spec:
         agentpool: agentpool  # <-- This targets the specific node pool
       containers:
       - name: openaibackend
-        image: acropenai2.azurecr.io/backend:latest
+        image: acropenai2.azurecr.io/backend:12
         env:
             - name: AZURE_OPENAI_ENDPOINT
               value: https://foundry112.openai.azure.com
@@ -28,7 +28,8 @@ spec:
               value: "redisforopenai.uksouth.redis.azure.net"
             - name: REDIS_PORT
               value: "10000"
-       
+            - name: AZURE_CLIENT_ID
+              value: d872c677-71c9-478c-ac3c-77b7edb26238
 
 
 ---

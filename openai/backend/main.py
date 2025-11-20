@@ -3,23 +3,22 @@ import json
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-# Azure Managed Identity
+# Azure Identity (User Assigned Managed Identity)
 from azure.identity import DefaultAzureCredential
 
-# Azure OpenAI (Managed Identity)
+# Azure OpenAI
 from openai import AzureOpenAI
 
-# Redis AMR (Managed Identity Authentication)
-from redis import Redis
-from redis_entraid.cred_provider import (
-    create_from_managed_identity,
-    ManagedIdentityType
-)
+# Redis with Entra ID Token Support
+import redis
+from redis_entraid.cred_provider import create_from_default_azure_credential
+
 
 # ------------------------------------------------------
-# FastAPI Application
+# FastAPI App
 # ------------------------------------------------------
 app = FastAPI()
+
 
 # ------------------------------------------------------
 # Environment Variables
@@ -30,7 +29,7 @@ AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT")
 REDIS_HOST = os.getenv("REDIS_HOST")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "10000"))
 
-# Required for USER-ASSIGNED IDENTITY
+# Required for user-assigned MI
 UAMI_CLIENT_ID = os.getenv("AZURE_CLIENT_ID")
 
 if not AZURE_OPENAI_ENDPOINT or not AZURE_OPENAI_DEPLOYMENT:
@@ -44,9 +43,11 @@ if not UAMI_CLIENT_ID:
 
 
 # ------------------------------------------------------
-# Azure OpenAI Client (Managed Identity)
+# Azure OpenAI Client (via User-Assigned Managed Identity)
 # ------------------------------------------------------
-credential = DefaultAzureCredential()
+credential = DefaultAzureCredential(
+    managed_identity_client_id=UAMI_CLIENT_ID  # 🔥 Tells Azure Identity to use UAMI
+)
 
 openai_token = credential.get_token("https://cognitiveservices.azure.com/.default")
 
@@ -58,19 +59,22 @@ client = AzureOpenAI(
 
 
 # ------------------------------------------------------
-# Redis Client — User Assigned Managed Identity
+# Redis Client (User Assigned MI via AMR Provider)
 # ------------------------------------------------------
-credential_provider = create_from_managed_identity(
-    identity_type=ManagedIdentityType.USER_ASSIGNED,
-    client_id=UAMI_CLIENT_ID,     # 🔥 REQUIRED for user-assigned MI
+# redis-entraid provider wraps DefaultAzureCredential
+REDIS_SCOPE = ("https://redis.azure.com/.default",)
+
+credential_provider = create_from_default_azure_credential(
+    scopes=REDIS_SCOPE,
+    credential=credential,          # 🔥 Using UAMI credentials
 )
 
-redis_client = Redis(
+redis_client = redis.Redis(
     host=REDIS_HOST,
     port=REDIS_PORT,
     ssl=True,
     decode_responses=True,
-    credential_provider=credential_provider,   # 🔥 Official AMR Auth Method
+    credential_provider=credential_provider,   # 🔥 Correct AMR integration
     socket_timeout=10,
     socket_connect_timeout=10,
 )
@@ -85,16 +89,14 @@ class Prompt(BaseModel):
 
 
 # ------------------------------------------------------
-# Redis Helper Methods
+# Redis Helpers
 # ------------------------------------------------------
 def load_chat(chat_id: str):
-    """Fetch conversation history from Redis."""
     data = redis_client.get(chat_id)
     return json.loads(data) if data else []
 
 
 def save_chat(chat_id: str, messages):
-    """Persist chat history into Redis."""
     redis_client.set(chat_id, json.dumps(messages))
 
 
@@ -104,13 +106,13 @@ def save_chat(chat_id: str, messages):
 @app.post("/chat")
 async def chat(p: Prompt):
     try:
-        # Load previous messages
+        # Load existing history
         history = load_chat(p.chat_id)
 
-        # Add current user message
+        # Add user's message
         history.append({"role": "user", "content": p.message})
 
-        # Call Azure OpenAI with FULL context from Redis
+        # Call Azure OpenAI with full history
         response = client.chat.completions.create(
             model=AZURE_OPENAI_DEPLOYMENT,
             messages=history
@@ -118,11 +120,10 @@ async def chat(p: Prompt):
 
         reply = response.choices[0].message.content
 
-        # Save assistant response
+        # Save assistant reply
         history.append({"role": "assistant", "content": reply})
         save_chat(p.chat_id, history)
 
-        # Return response + token usage
         return {
             "text": reply,
             "usage": {

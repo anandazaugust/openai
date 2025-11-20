@@ -18,7 +18,7 @@ spec:
         agentpool: agentpool  # <-- This targets the specific node pool
       containers:
       - name: openaifrontend
-        image: acropenai2.azurecr.io/frontend:latest
+        image: acropenai2.azurecr.io/frontend:12
         env:
             - name: BACKEND_URL
               value: http://openaibackend-svc
