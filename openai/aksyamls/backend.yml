@@ -18,7 +18,7 @@ spec:
         agentpool: agentpool  # <-- This targets the specific node pool
       containers:
       - name: openaibackend
-        image: acropenai2.azurecr.io/backend:12
+        image: acropenai2.azurecr.io/backend:13
         env:
             - name: AZURE_OPENAI_ENDPOINT
               value: https://foundry112.openai.azure.com

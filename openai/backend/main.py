@@ -3,7 +3,7 @@ import json
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-# Azure Identity (User Assigned Managed Identity)
+# Azure Identity (User Assigned Managed Identity handled via AZURE_CLIENT_ID)
 from azure.identity import DefaultAzureCredential
 
 # Azure OpenAI
@@ -25,12 +25,9 @@ app = FastAPI()
 # ------------------------------------------------------
 AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT")
-
 REDIS_HOST = os.getenv("REDIS_HOST")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "10000"))
-
-# Required for user-assigned MI
-UAMI_CLIENT_ID = os.getenv("AZURE_CLIENT_ID")
+UAMI_CLIENT_ID = os.getenv("AZURE_CLIENT_ID")  # REQUIRED for UAMI to work
 
 if not AZURE_OPENAI_ENDPOINT or not AZURE_OPENAI_DEPLOYMENT:
     raise RuntimeError("AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_DEPLOYMENT must be set")
@@ -43,12 +40,9 @@ if not UAMI_CLIENT_ID:
 
 
 # ------------------------------------------------------
-# Azure OpenAI Client (via User-Assigned Managed Identity)
+# Azure OpenAI Client (via User-Assigned MI)
 # ------------------------------------------------------
-credential = DefaultAzureCredential(
-    managed_identity_client_id=UAMI_CLIENT_ID  # 🔥 Tells Azure Identity to use UAMI
-)
-
+credential = DefaultAzureCredential()
 openai_token = credential.get_token("https://cognitiveservices.azure.com/.default")
 
 client = AzureOpenAI(
@@ -59,14 +53,13 @@ client = AzureOpenAI(
 
 
 # ------------------------------------------------------
-# Redis Client (User Assigned MI via AMR Provider)
+# Redis Client (works with UAMI via env AZURE_CLIENT_ID)
 # ------------------------------------------------------
-# redis-entraid provider wraps DefaultAzureCredential
 REDIS_SCOPE = ("https://redis.azure.com/.default",)
 
+# This function will automatically use the UAMI because AZURE_CLIENT_ID is set.
 credential_provider = create_from_default_azure_credential(
-    scopes=REDIS_SCOPE,
-    credential=credential,          # 🔥 Using UAMI credentials
+    scopes=REDIS_SCOPE
 )
 
 redis_client = redis.Redis(
@@ -74,7 +67,7 @@ redis_client = redis.Redis(
     port=REDIS_PORT,
     ssl=True,
     decode_responses=True,
-    credential_provider=credential_provider,   # 🔥 Correct AMR integration
+    credential_provider=credential_provider,
     socket_timeout=10,
     socket_connect_timeout=10,
 )
@@ -106,13 +99,13 @@ def save_chat(chat_id: str, messages):
 @app.post("/chat")
 async def chat(p: Prompt):
     try:
-        # Load existing history
+        # Load previous history
         history = load_chat(p.chat_id)
 
-        # Add user's message
+        # Add user message
         history.append({"role": "user", "content": p.message})
 
-        # Call Azure OpenAI with full history
+        # Call Azure OpenAI
         response = client.chat.completions.create(
             model=AZURE_OPENAI_DEPLOYMENT,
             messages=history
