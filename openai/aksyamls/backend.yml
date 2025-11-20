@@ -19,8 +19,8 @@ spec:
         image: acropenai2.azurecr.io/backend:latest
 
         # FIX: expose containerPort 8080
-        ports:
-          - containerPort: 80
+        # ports:
+        #   - containerPort: 80
 
         env:
           - name: AZURE_OPENAI_ENDPOINT
@@ -41,10 +41,10 @@ kind: Service
 metadata:
   name: openaibackend-svc
 spec:
-  type: ClusterIP
+  type: LoadBalancer
   selector:
     app: openaibackend
   ports:
     - name: http
       port: 80
-      targetPort: 80
+      targetPort: 8080
