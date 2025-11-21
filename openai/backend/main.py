@@ -27,7 +27,7 @@ AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT")
 REDIS_HOST = os.getenv("REDIS_HOST")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "10000"))
-UAMI_CLIENT_ID = os.getenv("AZURE_CLIENT_ID")  # REQUIRED for UAMI to work
+# UAMI_CLIENT_ID = os.getenv("AZURE_CLIENT_ID")  # REQUIRED for UAMI to work
 
 if not AZURE_OPENAI_ENDPOINT or not AZURE_OPENAI_DEPLOYMENT:
     raise RuntimeError("AZURE_OPENAI_ENDPOINT and AZURE_OPENAI_DEPLOYMENT must be set")
@@ -35,8 +35,8 @@ if not AZURE_OPENAI_ENDPOINT or not AZURE_OPENAI_DEPLOYMENT:
 if not REDIS_HOST:
     raise RuntimeError("REDIS_HOST must be set")
 
-if not UAMI_CLIENT_ID:
-    raise RuntimeError("AZURE_CLIENT_ID must be set for user-assigned managed identity")
+# if not UAMI_CLIENT_ID:
+#     raise RuntimeError("AZURE_CLIENT_ID must be set for user-assigned managed identity")
 
 
 # ------------------------------------------------------
