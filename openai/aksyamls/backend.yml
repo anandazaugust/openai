@@ -16,7 +16,7 @@ spec:
         agentpool: agentpool
       containers:
       - name: openaibackend
-        image: acropenai2.azurecr.io/backend:18
+        image: acropenai2.azurecr.io/backend:19
 
         # FIX: expose containerPort 8080
         # ports:
@@ -31,6 +31,8 @@ spec:
             value: "redisforai.uksouth.redis.azure.net"
           - name: REDIS_PORT
             value: "10000"
+          - name: AZURE_CLIENT_ID
+            value: "11dfd8f3-a3e4-43f2-b479-1e028d515eb7"
           
 
 
