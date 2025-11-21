@@ -21,7 +21,7 @@ spec:
         image: acropenai2.azurecr.io/frontend:latest
         env:
             - name: BACKEND_URL
-              value: http://4.250.186.104
+              value: http://4.250.186.104:8080
          
        
 
