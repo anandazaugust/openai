@@ -6,64 +6,40 @@ from pydantic import BaseModel
 from contextlib import asynccontextmanager
 import logging
 
-# Azure Identity (uses AZURE_CLIENT_ID if provided)
 from azure.identity import DefaultAzureCredential
-
-# Azure OpenAI
 from openai import AzureOpenAI
 
-# Redis with EntraID Token Provider
 import redis
 from redis_entraid.cred_provider import create_from_default_azure_credential
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ------------------------------------------------------
-# Environment Variables
-# ------------------------------------------------------
 AZURE_OPENAI_ENDPOINT = os.getenv("AZURE_OPENAI_ENDPOINT")
 AZURE_OPENAI_DEPLOYMENT = os.getenv("AZURE_OPENAI_DEPLOYMENT")
 REDIS_HOST = os.getenv("REDIS_HOST")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "10000"))
 REDIS_SSL = os.getenv("REDIS_SSL", "true").lower() == "true"
 
-if not AZURE_OPENAI_ENDPOINT or not AZURE_OPENAI_DEPLOYMENT:
-    raise RuntimeError("AZURE_OPENAI_* variables must be set")
-
-if not REDIS_HOST:
-    raise RuntimeError("REDIS_HOST must be set")
-
-# Global clients
 redis_client = None
 openai_client = None
 
-# ------------------------------------------------------
-# Lifespan (Startup + Shutdown)
-# ------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global redis_client, openai_client
     logger.info("Initializing clients...")
 
     try:
-        # ----------------------------
-        # Azure OpenAI Client
-        # ----------------------------
+        # Azure OpenAI client (NO token fetch here)
         credential = DefaultAzureCredential()
-        openai_token = credential.get_token("https://cognitiveservices.azure.com/.default")
-
         openai_client = AzureOpenAI(
-            api_key=openai_token.token,
+            azure_ad_token_provider=credential,
             api_version="2024-10-01-preview",
-            azure_endpoint=AZURE_OPENAI_ENDPOINT,
+            azure_endpoint=AZURE_OPENAI_ENDPOINT
         )
         logger.info("Azure OpenAI client initialized")
 
-        # ----------------------------
-        # Redis Client (Managed Redis)
-        # ----------------------------
+        # Redis client (NO ping here)
         credential_provider = create_from_default_azure_credential(
             scopes=("https://redis.azure.com/.default",)
         )
@@ -80,112 +56,61 @@ async def lifespan(app: FastAPI):
             health_check_interval=30,
         )
 
-        redis_client.ping()
-        logger.info("Redis connection successful")
+        logger.info("Redis client created")
 
     except Exception as e:
-        logger.error(f"Failed during startup: {e}")
+        logger.error(f"Startup error: {e}")
         raise
 
     yield
 
-    # Shutdown
     if redis_client:
-        logger.info("Closing Redis connection...")
         redis_client.close()
 
 
-# ------------------------------------------------------
-# FastAPI App
-# ------------------------------------------------------
 app = FastAPI(lifespan=lifespan)
 
 
-# ------------------------------------------------------
-# Request Schema
-# ------------------------------------------------------
 class Prompt(BaseModel):
     chat_id: str
     message: str
 
 
-# ------------------------------------------------------
-# Redis Helpers
-# ------------------------------------------------------
 def load_chat(chat_id: str):
-    try:
-        data = redis_client.get(chat_id)
-        return json.loads(data) if data else []
-    except Exception as e:
-        logger.error(f"Redis load error: {e}")
-        raise HTTPException(status_code=503, detail="Storage service unavailable")
+    data = redis_client.get(chat_id)
+    return json.loads(data) if data else []
 
 
 def save_chat(chat_id: str, messages):
-    try:
-        redis_client.set(chat_id, json.dumps(messages))
-    except Exception as e:
-        logger.error(f"Redis save error: {e}")
-        raise HTTPException(status_code=503, detail="Storage service unavailable")
+    redis_client.set(chat_id, json.dumps(messages))
 
 
-# ------------------------------------------------------
-# /chat Endpoint
-# ------------------------------------------------------
 @app.post("/chat")
 async def chat(p: Prompt):
-    try:
-        history = load_chat(p.chat_id)
-        history.append({"role": "user", "content": p.message})
+    history = load_chat(p.chat_id)
+    history.append({"role": "user", "content": p.message})
 
-        # Run blocking OpenAI call in a thread
-        response = await asyncio.to_thread(
-            openai_client.chat.completions.create,
-            model=AZURE_OPENAI_DEPLOYMENT,
-            messages=history,
-        )
+    response = await asyncio.to_thread(
+        openai_client.chat.completions.create,
+        model=AZURE_OPENAI_DEPLOYMENT,
+        messages=history,
+    )
 
-        reply = response.choices[0].message.content
+    reply = response.choices[0].message.content
+    history.append({"role": "assistant", "content": reply})
+    save_chat(p.chat_id, history)
 
-        # Save reply
-        history.append({"role": "assistant", "content": reply})
-        save_chat(p.chat_id, history)
-
-        return {
-            "text": reply,
-            "usage": {
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens,
-            },
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.error(f"Chat error: {e}")
-        raise HTTPException(status_code=500, detail="Internal server error")
+    return {
+        "text": reply,
+        "usage": {
+            "prompt_tokens": response.usage.prompt_tokens,
+            "completion_tokens": response.usage.completion_tokens,
+            "total_tokens": response.usage.total_tokens,
+        },
+    }
 
 
-# ------------------------------------------------------
-# /health Endpoint
-# ------------------------------------------------------
 @app.get("/health")
-async def health_check():
-    try:
-        # Redis
-        redis_client.ping()
-
-        # Quick OpenAI check (non-blocking)
-        await asyncio.to_thread(
-            openai_client.chat.completions.create,
-            model=AZURE_OPENAI_DEPLOYMENT,
-            messages=[{"role": "user", "content": "health"}],
-            max_tokens=1,
-        )
-
-        return {"status": "healthy"}
-
-    except Exception as e:
-        logger.error(f"Health check failed: {e}")
-        raise HTTPException(status_code=503, detail="Unhealthy service")
+async def health():
+    redis_client.ping()
+    return {"status": "healthy"}

@@ -16,7 +16,7 @@ spec:
         agentpool: agentpool
       containers:
       - name: openaibackend
-        image: acropenai2.azurecr.io/backend:latest
+        image: acropenai2.azurecr.io/backend:22
 
         # FIX: expose containerPort 8080
         ports:
