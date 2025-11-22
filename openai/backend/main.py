@@ -14,7 +14,7 @@ from redis_entraid.cred_provider import create_from_default_azure_credential
 
 
 # ------------------------------------------------------
-# Logging
+# Logging setup
 # ------------------------------------------------------
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -44,20 +44,20 @@ openai_client = None
 
 
 # ------------------------------------------------------
-# Redis Warmup (async to avoid blocking startup)
+# Redis Warmup Task
 # ------------------------------------------------------
 async def warm_redis():
-    await asyncio.sleep(1)  # small delay to avoid startup contention
+    await asyncio.sleep(1)
     try:
         logger.info("Warming up Redis token...")
-        redis_client.ping()  # triggers token fetch async
+        redis_client.ping()
         logger.info("Redis warm-up complete")
     except Exception as e:
         logger.warning(f"Redis warm-up failed: {e}")
 
 
 # ------------------------------------------------------
-# Lifespan: Startup / Shutdown
+# Lifespan (Startup + Shutdown)
 # ------------------------------------------------------
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -65,22 +65,27 @@ async def lifespan(app: FastAPI):
     logger.info("Initializing clients...")
 
     try:
-        # ----------------------------
-        # Azure OpenAI Client
-        # ----------------------------
-        credential = DefaultAzureCredential()
+        # ----------------------------------------
+        # SEPARATE credentials for OpenAI & Redis
+        # ----------------------------------------
+        openai_credential = DefaultAzureCredential()
+        redis_credential = DefaultAzureCredential()
 
+        # ----------------------------------------
+        # Azure OpenAI Client
+        # ----------------------------------------
         openai_client = AzureOpenAI(
-            azure_ad_token_provider=credential,
+            azure_ad_token_provider=openai_credential,
             api_version="2024-10-01-preview",
             azure_endpoint=AZURE_OPENAI_ENDPOINT
         )
         logger.info("Azure OpenAI client initialized")
 
-        # ----------------------------
-        # Redis (AMR with EntraID)
-        # ----------------------------
-        credential_provider = create_from_default_azure_credential(
+        # ----------------------------------------
+        # Redis Client (Managed Redis + EntraID)
+        # ----------------------------------------
+        redis_cred_provider = create_from_default_azure_credential(
+            credential=redis_credential,                    # <-- Important fix!
             scopes=("https://redis.azure.com/.default",)
         )
 
@@ -89,7 +94,7 @@ async def lifespan(app: FastAPI):
             port=REDIS_PORT,
             ssl=REDIS_SSL,
             decode_responses=True,
-            credential_provider=credential_provider,
+            credential_provider=redis_cred_provider,
             socket_timeout=10,
             socket_connect_timeout=10,
             retry_on_timeout=True,
@@ -97,18 +102,16 @@ async def lifespan(app: FastAPI):
         )
         logger.info("Redis client created")
 
-        # Warm-up Redis asynchronously (does not block startup)
+        # Async warm-up (no blocking)
         asyncio.create_task(warm_redis())
 
     except Exception as e:
-        logger.error(f"Startup error: {e}")
+        logger.error(f"Startup failed: {e}")
         raise
 
     yield
 
-    # ----------------------------
     # Shutdown
-    # ----------------------------
     if redis_client:
         logger.info("Closing Redis connection...")
         redis_client.close()
@@ -154,11 +157,9 @@ def save_chat(chat_id: str, messages):
 @app.post("/chat")
 async def chat(p: Prompt):
     try:
-        # Load conversation history
         history = load_chat(p.chat_id)
         history.append({"role": "user", "content": p.message})
 
-        # OpenAI call in separate thread (non-blocking)
         response = await asyncio.to_thread(
             openai_client.chat.completions.create,
             model=AZURE_OPENAI_DEPLOYMENT,
@@ -166,8 +167,6 @@ async def chat(p: Prompt):
         )
 
         reply = response.choices[0].message.content
-
-        # Save assistant reply
         history.append({"role": "assistant", "content": reply})
         save_chat(p.chat_id, history)
 
@@ -186,13 +185,8 @@ async def chat(p: Prompt):
 
 
 # ------------------------------------------------------
-# /health Endpoint (Non-blocking)
+# /health Endpoint (Non-blocking, production safe)
 # ------------------------------------------------------
 @app.get("/health")
 async def health():
-    """
-    Non-blocking health check.
-    We do NOT ping Redis or hit OpenAI because MSI token providers
-    can block these calls during refresh, causing kube probes to fail.
-    """
     return {"status": "ok"}
