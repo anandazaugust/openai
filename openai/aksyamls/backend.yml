@@ -19,16 +19,16 @@ spec:
         image: acropenai2.azurecr.io/backend:latest
 
         # FIX: expose containerPort 8080
-        # ports:
-        #   - containerPort: 80t
+        ports:
+          - containerPort: 8080
 
         env:
           - name: AZURE_OPENAI_ENDPOINT
             value: "https://openai11234.openai.azure.com"
           - name: AZURE_OPENAI_DEPLOYMENT
-            value: "gpt-5-mini"
+            value: "gpt-5-nano"
           - name: REDIS_HOST
-            value: "redisforai.uksouth.redis.azure.net"
+            value: "aiforredis.uksouth.redis.azure.net"
           - name: REDIS_PORT
             value: "10000"
           - name: AZURE_CLIENT_ID
