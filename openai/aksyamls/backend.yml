@@ -24,7 +24,7 @@ spec:
 
         env:
           - name: AZURE_OPENAI_ENDPOINT
-            value: "https://openai11234.openai.azure.com"
+            value: "https://foundry11234.openai.azure.com"
           - name: AZURE_OPENAI_DEPLOYMENT
             value: "gpt-5-nano"
           - name: REDIS_HOST
@@ -32,7 +32,7 @@ spec:
           - name: REDIS_PORT
             value: "10000"
           - name: AZURE_CLIENT_ID
-            value: "67149d02-31af-4e28-a925-633f1d4c045d"
+            value: "946c4638-a140-4a49-9357-1531c9b2ad2e"
           
 
 
