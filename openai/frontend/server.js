@@ -8,7 +8,7 @@ const BACKEND_URL = process.env.BACKEND_URL || "http://localhost:8080";
 app.use(express.static(__dirname));
 app.use(express.json());
 
-// ---- Proxy for sending chat messages ----
+// Forward /chat
 app.post("/chat", async (req, res) => {
   try {
     const response = await fetch(`${BACKEND_URL}/chat`, {
@@ -25,7 +25,7 @@ app.post("/chat", async (req, res) => {
   }
 });
 
-// ---- Proxy to load Redis history ----
+// Forward /history
 app.get("/history", async (req, res) => {
   const chatId = req.query.chat_id;
 
@@ -36,6 +36,18 @@ app.get("/history", async (req, res) => {
   } catch (err) {
     console.error("Error loading history:", err);
     res.status(500).json({ error: "Failed to load history" });
+  }
+});
+
+// Forward /list_chats
+app.get("/list_chats", async (req, res) => {
+  try {
+    const response = await fetch(`${BACKEND_URL}/list_chats`);
+    const data = await response.json();
+    res.json(data);
+  } catch (err) {
+    console.error("Error loading chat list:", err);
+    res.status(500).json({ error: "Failed to load chat list" });
   }
 });
 

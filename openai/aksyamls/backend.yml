@@ -16,7 +16,7 @@ spec:
         agentpool: agentpool
       containers:
       - name: openaibackend
-        image: acropenai2.azurecr.io/backend:31
+        image: acropenai2.azurecr.io/backend:32
 
        
 

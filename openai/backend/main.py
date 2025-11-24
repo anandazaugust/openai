@@ -5,7 +5,6 @@ from pydantic import BaseModel
 
 from azure.identity import DefaultAzureCredential
 from openai import AzureOpenAI
-
 import redis
 
 
@@ -61,7 +60,7 @@ def create_redis_client():
         ssl=True,
         decode_responses=True,
         username="$managed",
-        password=token,       # AAD token
+        password=token,
         socket_timeout=10,
         socket_connect_timeout=10,
     )
@@ -96,13 +95,10 @@ def save_chat(chat_id: str, messages):
 @app.post("/chat")
 async def chat(p: Prompt):
     try:
-        # Load previous messages
         history = load_chat(p.chat_id)
 
-        # Add user message
         history.append({"role": "user", "content": p.message})
 
-        # Azure OpenAI call
         response = client.chat.completions.create(
             model=AZURE_OPENAI_DEPLOYMENT,
             messages=history
@@ -110,17 +106,11 @@ async def chat(p: Prompt):
 
         reply = response.choices[0].message.content
 
-        # Save AI reply
         history.append({"role": "assistant", "content": reply})
         save_chat(p.chat_id, history)
 
         return {
-            "text": reply,
-            "usage": {
-                "prompt_tokens": response.usage.prompt_tokens,
-                "completion_tokens": response.usage.completion_tokens,
-                "total_tokens": response.usage.total_tokens
-            }
+            "text": reply
         }
 
     except Exception as e:
@@ -128,17 +118,24 @@ async def chat(p: Prompt):
 
 
 # ----------------------------------------------------------
-# NEW: HISTORY ENDPOINT
+# RETURN HISTORY FOR A CHAT
 # ----------------------------------------------------------
 @app.get("/history")
 async def get_history(chat_id: str):
     try:
         history = load_chat(chat_id)
+        return {"chat_id": chat_id, "messages": history}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
-        return {
-            "chat_id": chat_id,
-            "messages": history
-        }
 
+# ----------------------------------------------------------
+# LIST ALL CHAT IDs
+# ----------------------------------------------------------
+@app.get("/list_chats")
+async def list_chats():
+    try:
+        keys = redis_client.keys("chat-*")
+        return {"chat_ids": keys}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

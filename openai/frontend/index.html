@@ -9,22 +9,13 @@
 <body>
   <div class="layout">
 
-    <!-- SIDEBAR -->
     <div class="sidebar">
       <div class="sidebar-header">💬 MyOwnGPT</div>
-
       <button class="menu-btn" id="new-chat">➕ New Chat</button>
-
       <div id="chat-list" class="chat-list"></div>
-
       <button class="menu-btn danger" id="clear-all">🧹 Clear All Chats</button>
-
-      <div class="sidebar-footer">
-        <small>Powered by Azure OpenAI</small>
-      </div>
     </div>
 
-    <!-- MAIN CHAT WINDOW -->
     <div class="main">
       <div id="chat-box" class="chat-box"></div>
 
@@ -37,7 +28,7 @@
   </div>
 
 <script>
-  let chats = JSON.parse(localStorage.getItem("chats") || "{}");
+  let chats = {};
   let activeChatId = null;
 
   const chatBox = document.getElementById("chat-box");
@@ -47,55 +38,71 @@
   const newChatBtn = document.getElementById("new-chat");
   const clearAllBtn = document.getElementById("clear-all");
 
-  /* ---------- SAVE CHAT TITLES ONLY ---------- */
-  function saveChats() {
-    localStorage.setItem("chats", JSON.stringify(chats));
+
+  /* ---------- Load chat list from Redis ---------- */
+  async function loadRedisChatList() {
+    const res = await fetch("/list_chats");
+    const data = await res.json();
+
+    const ids = data.chat_ids || [];
+
+    chatList.innerHTML = "";
+
+    if (ids.length === 0) {
+      createNewChat();
+      return;
+    }
+
+    ids.forEach(id => {
+      chats[id] = chats[id] || { title: id };
+    });
+
+    renderChatList();
+    loadChat(ids[0]);
   }
 
-  /* ---------- RENDER CHAT LIST ---------- */
+
+  /* ---------- Render sidebar ---------- */
   function renderChatList() {
     chatList.innerHTML = "";
+
     Object.keys(chats).forEach(id => {
       const btn = document.createElement("button");
       btn.className = "chat-item";
-      btn.textContent = chats[id].title || "New Chat";
+      btn.textContent = chats[id].title;
       btn.onclick = () => loadChat(id);
       chatList.appendChild(btn);
     });
   }
 
-  /* ---------- LOAD CHAT HISTORY FROM REDIS ---------- */
+
+  /* ---------- Load chat messages from Redis ---------- */
   async function loadChat(id) {
     activeChatId = id;
     chatBox.innerHTML = "";
 
-    try {
-      const res = await fetch(`/history?chat_id=${id}`);
-      const data = await res.json();
+    const res = await fetch(`/history?chat_id=${id}`);
+    const data = await res.json();
 
-      const history = data.messages || [];
+    const history = data.messages || [];
 
-      // Do NOT store these messages locally anymore!
-      history.forEach(msg => addMessage(msg.role, msg.content));
-
-    } catch (err) {
-      console.error("Failed to load history:", err);
-      addMessage("assistant", "⚠️ Unable to load chat history");
-    }
+    history.forEach(msg => addMessage(msg.role, msg.content));
   }
 
-  /* ---------- CREATE A NEW CHAT ---------- */
+
+  /* ---------- Create new chat ---------- */
   function createNewChat() {
-    activeChatId = "chat-" + Date.now();
-    chats[activeChatId] = {
-      title: "New Chat"
-    };
-    saveChats();
+    const id = "chat-" + Date.now();
+
+    chats[id] = { title: id };
     renderChatList();
     chatBox.innerHTML = "";
+
+    activeChatId = id;
   }
 
-  /* ---------- UI: ADD MESSAGE ---------- */
+
+  /* ---------- Push message to UI ---------- */
   function addMessage(role, content) {
     const msg = document.createElement("div");
     msg.classList.add("message", role);
@@ -104,85 +111,63 @@
     chatBox.scrollTop = chatBox.scrollHeight;
   }
 
-  /* ---------- TYPING EFFECT ---------- */
+
+  /* ---------- Typing effect ---------- */
   async function typeMessage(role, text) {
     const msg = document.createElement("div");
     msg.classList.add("message", role);
+
     const bubble = document.createElement("div");
     bubble.classList.add("bubble");
     msg.appendChild(bubble);
+
     chatBox.appendChild(msg);
 
     for (let i = 0; i < text.length; i++) {
       bubble.textContent += text[i];
       chatBox.scrollTop = chatBox.scrollHeight;
-      await new Promise(r => setTimeout(r, 7));
+      await new Promise(r => setTimeout(r, 5));
     }
   }
 
-  /* ---------- SEND MESSAGE ---------- */
-  sendBtn.addEventListener("click", async () => {
-    const prompt = input.value.trim();
-    if (!prompt || !activeChatId) return;
 
-    addMessage("user", prompt);
+  /* ---------- Send message ---------- */
+  sendBtn.addEventListener("click", async () => {
+    const text = input.value.trim();
+    if (!text) return;
+
+    addMessage("user", text);
     input.value = "";
 
-    // Temporary placeholder
     addMessage("assistant", "Thinking...");
 
-    try {
-      const res = await fetch("/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          chat_id: activeChatId,
-          message: prompt
-        }),
-      });
+    const res = await fetch("/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        chat_id: activeChatId,
+        message: text
+      })
+    });
 
-      const data = await res.json();
-      const botText = data.text;
+    const data = await res.json();
+    const bot = data.text;
 
-      chatBox.lastChild.remove(); // remove "Thinking..."
+    chatBox.lastChild.remove(); // remove "Thinking..."
+    await typeMessage("assistant", bot);
 
-      await typeMessage("assistant", botText);
-
-      // Reload full conversation from Redis
-      chatBox.innerHTML = "";
-      await loadChat(activeChatId);
-
-      // Auto title
-      if (chats[activeChatId].title === "New Chat") {
-        chats[activeChatId].title = prompt.substring(0, 25);
-        saveChats();
-        renderChatList();
-      }
-
-    } catch (err) {
-      addMessage("assistant", "⚠️ Error: " + err.message);
-    }
+    await loadChat(activeChatId);
   });
 
-  /* ---------- BUTTON ACTIONS ---------- */
-  newChatBtn.addEventListener("click", createNewChat);
 
-  clearAllBtn.addEventListener("click", () => {
-    if (confirm("Delete all chats?")) {
-      chats = {};
-      saveChats();
-      renderChatList();
-      chatBox.innerHTML = "";
-    }
+  /* ---------- Clear ALL chats (Redis + UI) ---------- */
+  clearAllBtn.addEventListener("click", async () => {
+    alert("Redis version of clear_all is not implemented yet. Ask me to create it.");
   });
 
-  /* ---------- INITIAL LOAD ---------- */
-  if (Object.keys(chats).length === 0) {
-    createNewChat();
-  } else {
-    renderChatList();
-    loadChat(Object.keys(chats)[0]);
-  }
+
+  /* ---------- Start ---------- */
+  loadRedisChatList();
 </script>
 
 </body>
