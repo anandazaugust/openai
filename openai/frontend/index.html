@@ -47,7 +47,7 @@
   const newChatBtn = document.getElementById("new-chat");
   const clearAllBtn = document.getElementById("clear-all");
 
-  /* ---------- SAVE CHATS LOCALLY ---------- */
+  /* ---------- SAVE CHAT TITLES ONLY ---------- */
   function saveChats() {
     localStorage.setItem("chats", JSON.stringify(chats));
   }
@@ -64,7 +64,7 @@
     });
   }
 
-  /* ---------- LOAD CHAT FROM REDIS BACKEND ---------- */
+  /* ---------- LOAD CHAT HISTORY FROM REDIS ---------- */
   async function loadChat(id) {
     activeChatId = id;
     chatBox.innerHTML = "";
@@ -75,11 +75,7 @@
 
       const history = data.messages || [];
 
-      // Update local cache (only for titles)
-      chats[id].messages = history;
-      saveChats();
-
-      // Render to UI
+      // Do NOT store these messages locally anymore!
       history.forEach(msg => addMessage(msg.role, msg.content));
 
     } catch (err) {
@@ -88,12 +84,11 @@
     }
   }
 
-  /* ---------- CREATE NEW CHAT ---------- */
+  /* ---------- CREATE A NEW CHAT ---------- */
   function createNewChat() {
     activeChatId = "chat-" + Date.now();
     chats[activeChatId] = {
-      title: "New Chat",
-      messages: []
+      title: "New Chat"
     };
     saveChats();
     renderChatList();
@@ -153,7 +148,8 @@
 
       await typeMessage("assistant", botText);
 
-      // Refresh UI from Redis
+      // Reload full conversation from Redis
+      chatBox.innerHTML = "";
       await loadChat(activeChatId);
 
       // Auto title

@@ -25,7 +25,7 @@ app.post("/chat", async (req, res) => {
   }
 });
 
-// ---- Proxy to load Redis chat history ----
+// ---- Proxy to load Redis history ----
 app.get("/history", async (req, res) => {
   const chatId = req.query.chat_id;
 
@@ -34,7 +34,7 @@ app.get("/history", async (req, res) => {
     const data = await response.json();
     res.json(data);
   } catch (err) {
-    console.error("Error calling backend:", err);
+    console.error("Error loading history:", err);
     res.status(500).json({ error: "Failed to load history" });
   }
 });
