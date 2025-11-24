@@ -9,6 +9,7 @@ on:
     - feature1
     - redisforllm-localstorageforui
     - simplifiedredis
+    - frontendgetrequest
   workflow_dispatch:  
     inputs:
       tier:

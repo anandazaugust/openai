@@ -64,16 +64,28 @@
     });
   }
 
-  /* ---------- LOAD CHAT ---------- */
-  function loadChat(id) {
+  /* ---------- LOAD CHAT FROM REDIS BACKEND ---------- */
+  async function loadChat(id) {
     activeChatId = id;
-    const chat = chats[id];
-
     chatBox.innerHTML = "";
 
-    if (!chat.messages || chat.messages.length === 0) return;
+    try {
+      const res = await fetch(`/history?chat_id=${id}`);
+      const data = await res.json();
 
-    chat.messages.forEach(msg => addMessage(msg.role, msg.content));
+      const history = data.messages || [];
+
+      // Update local cache (only for titles)
+      chats[id].messages = history;
+      saveChats();
+
+      // Render to UI
+      history.forEach(msg => addMessage(msg.role, msg.content));
+
+    } catch (err) {
+      console.error("Failed to load history:", err);
+      addMessage("assistant", "⚠️ Unable to load chat history");
+    }
   }
 
   /* ---------- CREATE NEW CHAT ---------- */
@@ -116,18 +128,12 @@
   /* ---------- SEND MESSAGE ---------- */
   sendBtn.addEventListener("click", async () => {
     const prompt = input.value.trim();
-    if (!prompt) return;
+    if (!prompt || !activeChatId) return;
 
-    // Display user message in UI
     addMessage("user", prompt);
-
-    // Store only for UI, NOT for sending to backend
-    chats[activeChatId].messages.push({ role: "user", content: prompt });
-    saveChats();
-
     input.value = "";
 
-    // Temporary "Thinking…" text
+    // Temporary placeholder
     addMessage("assistant", "Thinking...");
 
     try {
@@ -135,8 +141,8 @@
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          chat_id: activeChatId,   // <--- THIS IS KEY
-          message: prompt          // <--- ONLY new message
+          chat_id: activeChatId,
+          message: prompt
         }),
       });
 
@@ -145,16 +151,12 @@
 
       chatBox.lastChild.remove(); // remove "Thinking..."
 
-      // Save assistant reply locally for UI
-      chats[activeChatId].messages.push({
-        role: "assistant",
-        content: botText
-      });
-      saveChats();
-
       await typeMessage("assistant", botText);
 
-      // Auto-generate chat title
+      // Refresh UI from Redis
+      await loadChat(activeChatId);
+
+      // Auto title
       if (chats[activeChatId].title === "New Chat") {
         chats[activeChatId].title = prompt.substring(0, 25);
         saveChats();

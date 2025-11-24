@@ -8,6 +8,7 @@ on:
     - myowngpt
     - feature1
     - redisforllm-localstorageforui
+    - frontendgetrequest
   workflow_dispatch:  
     inputs:
       tier:

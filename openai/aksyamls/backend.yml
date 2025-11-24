@@ -18,9 +18,7 @@ spec:
       - name: openaibackend
         image: acropenai2.azurecr.io/backend:28
 
-        # FIX: expose containerPort 8080
-        ports:
-          - containerPort: 8080
+       
 
         env:
           - name: AZURE_OPENAI_ENDPOINT
