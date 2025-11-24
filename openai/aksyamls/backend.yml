@@ -42,7 +42,7 @@ kind: Service
 metadata:
   name: openaibackend-svc
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: openaibackend
   ports:
