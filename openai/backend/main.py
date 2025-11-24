@@ -60,8 +60,8 @@ def create_redis_client():
         port=REDIS_PORT,
         ssl=True,
         decode_responses=True,
-        username="$managed",        # <---- KEY FIX!!
-        password=token,            # <---- AAD token
+        username="$managed",
+        password=token,       # AAD token
         socket_timeout=10,
         socket_connect_timeout=10,
     )
@@ -102,7 +102,7 @@ async def chat(p: Prompt):
         # Add user message
         history.append({"role": "user", "content": p.message})
 
-        # OpenAI call
+        # Azure OpenAI call
         response = client.chat.completions.create(
             model=AZURE_OPENAI_DEPLOYMENT,
             messages=history
@@ -121,6 +121,23 @@ async def chat(p: Prompt):
                 "completion_tokens": response.usage.completion_tokens,
                 "total_tokens": response.usage.total_tokens
             }
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+# ----------------------------------------------------------
+# NEW: HISTORY ENDPOINT
+# ----------------------------------------------------------
+@app.get("/history")
+async def get_history(chat_id: str):
+    try:
+        history = load_chat(chat_id)
+
+        return {
+            "chat_id": chat_id,
+            "messages": history
         }
 
     except Exception as e:
