@@ -49,9 +49,9 @@ client = AzureOpenAI(
 )
 
 
-# ----------------------------------------------------------
+
 # Redis Client using $managed + AAD token
-# ----------------------------------------------------------
+
 def create_redis_client():
     token = credential.get_token("https://redis.azure.com/.default").token
 
@@ -60,8 +60,8 @@ def create_redis_client():
         port=REDIS_PORT,
         ssl=True,
         decode_responses=True,
-        username="$managed",        # <---- KEY FIX!!
-        password=token,            # <---- AAD token
+        username="$managed",        
+        password=token,            
         socket_timeout=10,
         socket_connect_timeout=10,
     )
@@ -70,17 +70,17 @@ def create_redis_client():
 redis_client = create_redis_client()
 
 
-# ----------------------------------------------------------
+
 # Request Model
-# ----------------------------------------------------------
+
 class Prompt(BaseModel):
     chat_id: str
     message: str
 
 
-# ----------------------------------------------------------
+
 # Redis Helpers
-# ----------------------------------------------------------
+
 def load_chat(chat_id: str):
     data = redis_client.get(chat_id)
     return json.loads(data) if data else []
@@ -90,9 +90,9 @@ def save_chat(chat_id: str, messages):
     redis_client.set(chat_id, json.dumps(messages))
 
 
-# ----------------------------------------------------------
+
 # CHAT ENDPOINT
-# ----------------------------------------------------------
+
 @app.post("/chat")
 async def chat(p: Prompt):
     try:

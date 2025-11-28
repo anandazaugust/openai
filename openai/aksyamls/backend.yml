@@ -16,15 +16,13 @@ spec:
         agentpool: agentpool
       containers:
       - name: openaibackend
-        image: acropenai2.azurecr.io/backend:28
+        image: acropenai2.azurecr.io/backend:34
 
-        # FIX: expose containerPort 8080
-        ports:
-          - containerPort: 8080
+    
 
         env:
           - name: AZURE_OPENAI_ENDPOINT
-            value: "https://foundry11234.openai.azure.com"
+            value: "https://foundry55555.openai.azure.com"
           - name: AZURE_OPENAI_DEPLOYMENT
             value: "gpt-5-nano"
           - name: REDIS_HOST
@@ -42,7 +40,7 @@ kind: Service
 metadata:
   name: openaibackend-svc
 spec:
-  type: LoadBalancer
+  type: ClusterIP
   selector:
     app: openaibackend
   ports:
