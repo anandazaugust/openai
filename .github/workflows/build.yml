@@ -7,6 +7,7 @@ on:
     - newpythonupdate
     - myowngpt
     - feature1
+    - azdevchennaicommunity
   workflow_dispatch:  
     inputs:
       tier:
