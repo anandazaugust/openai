@@ -21,7 +21,7 @@ spec:
         image: acropenai2.azurecr.io/backend:latest
         env:
             - name: AZURE_OPENAI_ENDPOINT
-              value: https://foundryworld.openai.azure.com/
+              value: https://foundryworld.cognitiveservices.azure.com/
             - name: AZURE_OPENAI_DEPLOYMENT
               value: "gpt-5-mini"
        

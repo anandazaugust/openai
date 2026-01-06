@@ -28,7 +28,6 @@ if not AZURE_OPENAI_ENDPOINT or not AZURE_OPENAI_DEPLOYMENT:
 
 # ----------------------------
 # Azure Entra ID authentication
-# (Auto-refresh token provider)
 # ----------------------------
 token_provider = get_bearer_token_provider(
     DefaultAzureCredential(),
@@ -64,4 +63,6 @@ async def chat(p: Prompt):
         }
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
